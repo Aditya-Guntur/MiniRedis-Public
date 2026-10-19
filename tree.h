@@ -32,7 +32,7 @@ struct s_node {
 struct s_leaf {
     Tag tag;
     Tree *west;
-    Leaf *east;
+    Tree *east;
     int8 *key;
     int8 *value;
     int16 size;

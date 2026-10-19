@@ -111,72 +111,50 @@ int update_leaf(Node *root, const int8 *key, const int8 *new_value, int16 new_si
  * @return 0 on success, -1 on error
  */
 int delete_leaf(Node *root, const int8 *key) {
-    Tree *current_tree;
-    Leaf *current_leaf = NULL, *prev_leaf = NULL;
-    
-    // Validate input parameters
+    // prev/current used to be declared Leaf* and walked via
+    // current_leaf = current_leaf->east, which assumed every sibling
+    // under root was a Leaf. The moment a subdirectory was mixed in
+    // (anywhere in the chain, not just adjacent to the target key),
+    // this would misread a Node's bytes as a Leaf's.
+    Tree *prev = NULL;
+    Tree *current = root->east;
+
     if (!root || !key) {
         errno = EINVAL;
         return -1;
     }
-    
-    // Start from the first leaf
-    current_tree = root->east;
-    if (current_tree) {
-        current_leaf = &(current_tree->l);
-    }
-    
-    // Special case: the leaf to delete is the first one
-    if (current_leaf && strcmp((const char *)current_leaf->key, (const char *)key) == 0) {
-        if (current_leaf->east) {
-            // If there's a next leaf, update root's east pointer to point to it
-            root->east = (Tree *)current_leaf->east;
-            // Update the west pointer of the new first leaf to point back to root
-            current_leaf->east->west = (Tree *)root;
+
+    while (current != NULL) {
+        if (!(current->l.tag & TagLeaf)) {
+            prev = current;
+            current = current->n.east;
+            continue;
+        }
+
+        if (strcmp((const char *)current->l.key, (const char *)key) != 0) {
+            prev = current;
+            current = current->l.east;
+            continue;
+        }
+
+        // Found it - unlink from whatever precedes it (or root, if it
+        // was the first child).
+        Tree *next = current->l.east;
+        if (prev) {
+            if (prev->n.tag & (TagNode | TagRoot)) prev->n.east = next;
+            else prev->l.east = next;
         } else {
-            // No more leaves after this one
-            root->east = NULL;
+            root->east = next;
         }
-        
-        // Free the leaf's resources
-        if (current_leaf->value) {
-            free(current_leaf->value);
-        }
-        free(current_leaf);
-        
+
+        if (current->l.value) free(current->l.value);
+        if (current->l.key) free(current->l.key);
+        free(current);
+
         errno = NoError;
         return 0;
     }
-    
-    // Traverse the linked list to find the leaf to delete
-    while (current_leaf) {
-        if (strcmp((const char *)current_leaf->key, (const char *)key) == 0) {
-            // Found the leaf to delete
-            if (prev_leaf) {
-                prev_leaf->east = current_leaf->east;
-            }
-            
-            // Update the west pointer of the next leaf if it exists
-            if (current_leaf->east) {
-                current_leaf->east->west = (prev_leaf) ? (Tree *)prev_leaf : (Tree *)root;
-            }
-            
-            // Free the leaf's resources
-            if (current_leaf->value) {
-                free(current_leaf->value);
-            }
-            free(current_leaf);
-            
-            errno = NoError;
-            return 0;
-        }
-        
-        // Move to the next leaf
-        prev_leaf = current_leaf;
-        current_leaf = current_leaf->east;
-    }
-    
-    // If we get here, the key was not found
+
     errno = ENOENT;
     return -1;
 }
@@ -185,59 +163,74 @@ int delete_leaf(Node *root, const int8 *key) {
 void print_search_result(Leaf *result, const int8 *key);
 
 
-Leaf *find_last_linear(Node *parent) {
-    Leaf *l;
-    
+// Walks parent's child chain to the last sibling, whatever mix of
+// subdirectories and files it holds. This used to cast parent->east
+// straight to Leaf* and walk it as a leaf-only chain (same assumption
+// delete_leaf and search_leaf made), which misread a Node's bytes as
+// a Leaf's whenever a subdirectory came before a file under the same
+// parent.
+Tree *find_last_linear(Node *parent) {
+    Tree *t;
+
     if (!parent) {
         errno = EINVAL;
         return NULL;
     }
-    
+
     if (!parent->east) {
         errno = NoError;
         return NULL;
     }
-    
-    for (l = (Leaf *)parent->east; l->east; l = l->east);
-    
-    return l;
+
+    t = parent->east;
+    while (1) {
+        Tree *next = (t->n.tag & (TagNode | TagRoot)) ? t->n.east : t->l.east;
+        if (!next) break;
+        t = next;
+    }
+
+    return t;
 }
 
 Leaf *create_leaf(Node *parent, const int8 *key, const int8 *value, int16 count) {
-    Leaf *last_leaf, *new_leaf;
-    
+    Tree *last_sibling;
+    Leaf *new_leaf;
+
     if (!parent || !key || !value || count <= 0) {
         errno = EINVAL;
         return NULL;
     }
-    
+
     // Allocate and initialize new leaf first
     new_leaf = (Leaf *)malloc(sizeof(struct s_leaf));
     if (!new_leaf) {
         errno = ENOMEM;
         return NULL;
     }
-    
+
     // Initialize the new leaf
     zero((int8 *)new_leaf, sizeof(struct s_leaf));
     new_leaf->tag = TagLeaf;
-    
-    // Find the last leaf in the parent's east direction
-    last_leaf = find_last_linear(parent);
-    if (last_leaf == NULL && errno != NoError) {
+
+    // Find the last sibling (subdirectory or file) under this parent
+    last_sibling = find_last_linear(parent);
+    if (last_sibling == NULL && errno != NoError) {
         free(new_leaf);
         return NULL;
     }
-    
-    // Link the new leaf to the parent or the last leaf
-    if (!last_leaf) {
-        // First leaf for this parent
+
+    // Link the new leaf to the parent or the last sibling, whichever
+    // type that sibling actually is.
+    if (!last_sibling) {
+        // First child for this parent
         parent->east = (Tree *)new_leaf;
         new_leaf->west = (Tree *)parent;
+    } else if (last_sibling->n.tag & (TagNode | TagRoot)) {
+        last_sibling->n.east = (Tree *)new_leaf;
+        new_leaf->west = last_sibling;
     } else {
-        // Append to the end of the leaf list
-        last_leaf->east = new_leaf;
-        new_leaf->west = (Tree *)last_leaf;
+        last_sibling->l.east = (Tree *)new_leaf;
+        new_leaf->west = last_sibling;
     }
     
     // Allocate and copy the key
@@ -273,30 +266,32 @@ Leaf *create_leaf(Node *parent, const int8 *key, const int8 *value, int16 count)
  * @return Pointer to the Leaf if found, NULL otherwise
  */
 Leaf *search_leaf(const Node *root, const int8 *key) {
-    Leaf *current_leaf;
-    
+    Tree *current;
+
     // Validate input parameters
     if (!root || !key) {
         errno = EINVAL;  // Invalid argument
         return NULL;
     }
-    
-    // Start from the first leaf in the east direction
-    current_leaf = (Leaf *)root->east;
-    
-    // Traverse the linked list of leaves
-    while (current_leaf != NULL) {
-        // Check if the current leaf's key matches the search key
-        if (strcmp((const char *)current_leaf->key, (const char *)key) == 0) {
-            // Found the matching leaf
-            errno = NoError;
-            return current_leaf;
+
+    // Walk root's children, skipping subdirectories. This used to cast
+    // root->east straight to Leaf* and walk it as a leaf-only chain,
+    // which misread a Node's bytes as a Leaf's (and silently missed
+    // any real leaf sitting past a subdirectory in the same chain)
+    // whenever a parent had both kinds of children.
+    current = root->east;
+    while (current != NULL) {
+        if (current->l.tag & TagLeaf) {
+            if (strcmp((const char *)current->l.key, (const char *)key) == 0) {
+                errno = NoError;
+                return &current->l;
+            }
+            current = current->l.east;
+        } else {
+            current = current->n.east;
         }
-        
-        // Move to the next leaf in the east direction
-        current_leaf = current_leaf->east;
     }
-    
+
     // If we get here, the key was not found
     errno = ENOENT;  // No such entry
     return NULL;
@@ -371,7 +366,7 @@ void tree_cleanup() {
         while (current) {
             next = (current->n.tag & (TagNode | TagRoot)) ? 
                    current->n.east : 
-                   (Tree *)((Leaf *)current)->east;
+                   current->l.east;
             
             free_tree(current);
             current = next;

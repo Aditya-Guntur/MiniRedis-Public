@@ -146,7 +146,7 @@ void handle_cd(void **root_ptr, const char *path) {
                         break;
                     }
                 }
-                child = (child->n.tag & TagNode) ? child->n.east : (Tree *)((Leaf *)child)->east;
+                child = (child->n.tag & TagNode) ? child->n.east : child->l.east;
             }
             
             if (!found) {
@@ -203,7 +203,7 @@ void handle_mkdir(void *root_ptr, const char *path) {
                     break;
                 }
             }
-            child = (child->n.tag & TagNode) ? child->n.east : (Tree *)((Leaf *)child)->east;
+            child = (child->n.tag & TagNode) ? child->n.east : child->l.east;
         }
         
         if (!found) {
@@ -247,7 +247,7 @@ void handle_mkdir(void *root_ptr, const char *path) {
                     last_sibling = sibling;
                     break;
                 }
-                sibling = (Tree *)((Leaf *)sibling)->east;
+                sibling = sibling->l.east;
             } else {
                 // Unknown type, should not happen
                 printf("Error: Unknown node type in sibling list\n");
@@ -265,12 +265,16 @@ void handle_mkdir(void *root_ptr, const char *path) {
                 last_node->east = (Tree *)new_node;
                 // The west pointer should be set by create_node, so we don't need to set it here
             } else if (last_sibling->l.tag & TagLeaf) {
-                // Last sibling is a leaf - we can't have a leaf as the last sibling when adding a new node
-                // This should not happen as we should only be adding nodes to the node list
-                printf("Error: Cannot add a directory after a leaf node\n");
-                free_path_components(components, count);
-                free(new_node);
-                return;
+                // Last sibling is a leaf (a file already exists under
+                // this parent). This used to be rejected outright -
+                // Leaf.east was typed Leaf* instead of the generic
+                // Tree* every other part of the tree already treats it
+                // as, so writing a Node* through it couldn't be done
+                // without an unsafe cast. Now that the field is
+                // Tree*-typed, linking a subdirectory after a file is
+                // exactly as valid as linking it after another directory.
+                Leaf *last_leaf = (Leaf *)last_sibling;
+                last_leaf->east = (Tree *)new_node;
             }
         }
     }
@@ -302,7 +306,7 @@ void handle_ls(const void *root_ptr, const char *args) {
         }
         iter = (iter->n.tag & (TagNode | TagRoot)) ? 
                iter->n.east : 
-               (Tree *)((Leaf *)iter)->east;
+               iter->l.east;
     }
     
     // Print directory contents
@@ -316,7 +320,7 @@ void handle_ls(const void *root_ptr, const char *args) {
             }
             iter = (iter->n.tag & (TagNode | TagRoot)) ? 
                    iter->n.east : 
-                   (Tree *)((Leaf *)iter)->east;
+                   iter->l.east;
         }
     }
     
@@ -332,7 +336,7 @@ void handle_ls(const void *root_ptr, const char *args) {
             }
             iter = (iter->n.tag & (TagNode | TagRoot)) ? 
                    iter->n.east : 
-                   (Tree *)((Leaf *)iter)->east;
+                   iter->l.east;
         }
     }
     
