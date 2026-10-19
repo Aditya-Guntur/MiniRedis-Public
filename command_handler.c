@@ -88,7 +88,11 @@ void handle_cd(void **root_ptr, const char *path) {
     
     // Handle root directory
     if (!path || !*path || strcmp(path, "/") == 0) {
-        while (root->north) {
+        // root.north is self-referential (set in main()), not NULL, so
+        // "CD .." from root is a harmless no-op - but it also means a
+        // plain "while (root->north)" climb never terminates once it
+        // actually reaches root; stop at the self-reference instead.
+        while (root->north && root->north != root) {
             root = root->north;
         }
         *node_ptr = root;
@@ -111,8 +115,9 @@ void handle_cd(void **root_ptr, const char *path) {
     // Handle absolute paths
     Node *current = *root_ptr;
     if (path[0] == '/') {
-        // Go to root
-        while (current->north) current = current->north;
+        // Go to root (see the CD-to-root case above for why this
+        // checks for the self-reference, not just non-NULL)
+        while (current->north && current->north != current) current = current->north;
         path++; // Skip the leading '/'
         if (!*path) {
             *root_ptr = current;
@@ -173,8 +178,9 @@ void handle_mkdir(void *root_ptr, const char *path) {
     
     // Handle absolute paths
     if (path[0] == '/') {
-        // Go to root
-        while (root->north) root = root->north;
+        // Go to root (see handle_cd for why this checks for the
+        // self-reference, not just non-NULL)
+        while (root->north && root->north != root) root = root->north;
         path++; // Skip the leading '/'
         if (!*path) {
             printf("Error: Cannot create root directory\n");
