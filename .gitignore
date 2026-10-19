@@ -1,0 +1,18 @@
+# Build outputs
+*.exe
+*.o
+*.obj
+*.out
+tree
+a.out
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
