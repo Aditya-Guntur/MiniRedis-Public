@@ -608,7 +608,14 @@ void start_repl(Node *root) {
         
         // Remove newline
         input[strcspn(input, "\r\n")] = '\0';
-        
+
+        // EXIT/QUIT are advertised in the banner above but were never
+        // actually wired up anywhere - the only way out was EOF (Ctrl+D).
+        char *trimmed = trim_whitespace(input);
+        if (strcasecmp(trimmed, "EXIT") == 0 || strcasecmp(trimmed, "QUIT") == 0) {
+            break;
+        }
+
         // Create a void pointer to the current node pointer for process_command
         void *current_void = (void *)current;
         
