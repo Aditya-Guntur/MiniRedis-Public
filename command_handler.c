@@ -280,7 +280,8 @@ void handle_mkdir(void *root_ptr, const char *path) {
     free_path_components(components, count);
 }
 
-void handle_ls(const void *root_ptr) {
+void handle_ls(const void *root_ptr, const char *args) {
+    (void)args; // LS takes no arguments
     const Node *root = (const Node *)root_ptr;
     if (!root) {
         printf("Error: Invalid directory\n");
@@ -342,7 +343,8 @@ void handle_ls(const void *root_ptr) {
     }
 }
 
-void handle_pwd(const void *root_ptr) {
+void handle_pwd(const void *root_ptr, const char *args) {
+    (void)args; // PWD takes no arguments
     const Node *root = (const Node *)root_ptr;
     if (!root) {
         printf("/\n");
@@ -573,19 +575,7 @@ void process_command(void **root_ptr, const char *input) {
         handle_cd(root_ptr, args ? args : "");
         return;
     }
-    
-    // Handle LS command specially since it's const
-    if (strcasecmp(command, "LS") == 0) {
-        handle_ls(*node_ptr);
-        return;
-    }
-    
-    // Handle PWD command specially since it's const
-    if (strcasecmp(command, "PWD") == 0) {
-        handle_pwd(*node_ptr);
-        return;
-    }
-    
+
     // Find and execute the command
     for (int i = 0; commands[i].name != NULL; i++) {
         if (strcasecmp(command, commands[i].name) == 0) {

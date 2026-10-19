@@ -30,8 +30,8 @@ void handle_help(void *root_ptr, const char *args);
 // Navigation command handlers
 void handle_cd(void **root_ptr, const char *path);
 void handle_mkdir(void *root_ptr, const char *path);
-void handle_ls(const void *root_ptr);
-void handle_pwd(const void *root_ptr);
+void handle_ls(const void *root_ptr, const char *args);
+void handle_pwd(const void *root_ptr, const char *args);
 
 // Main command processing function
 void process_command(void **root_ptr, const char *input);
