@@ -327,7 +327,7 @@ void handle_ls(const void *root_ptr, const char *args) {
         iter = current;
         while (iter) {
             if (iter->l.tag & TagLeaf) {
-                printf("  \x1B[1;32m%-20s\x1B[0m  %-8zu bytes\n", 
+                printf("  \x1B[1;32m%-20s\x1B[0m  %-8d bytes\n",
                       iter->l.key, iter->l.size);
             }
             iter = (iter->n.tag & (TagNode | TagRoot)) ? 
@@ -338,8 +338,6 @@ void handle_ls(const void *root_ptr, const char *args) {
     
     if (dir_count == 0 && file_count == 0) {
         printf("Empty directory\n");
-    } else {
-        printf("<empty>\n");
     }
 }
 
