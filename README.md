@@ -46,20 +46,36 @@ $ ./tree
 Database Server (Type 'HELP' for commands, 'EXIT' to quit)
 db> SET name redis
 OK
+db> MKDIR config
+OK
+db> CD config
+db> SET port 8080
+OK
+db> CD ..
+db> LS
+Directories (1):
+  config
+
+Files (1):
+  name                 6        bytes
 db> GET name
 "redis"
-db> EXISTS name
-1
-db> DEL name
-1
 db> EXIT
 ```
 
 ## How it's implemented
 
 Each directory is a `Node`; each key/value pair is a `Leaf`. Both are stored
-in one C union (`Tree`), linked together with `north` (parent), `west`, and
-`east` pointers.
+in one C union (`Tree`) so a directory's children can be an arbitrary mix of
+subdirectories and files, walked through two pointers:
+
+- `west` - the first child (`NULL` if there are none)
+- `east` - the next sibling at the same level
+
+This is the standard "first-child, next-sibling" representation of a
+general tree using only two pointers per node, regardless of how many
+children or siblings an entry actually has. `north` is the parent pointer,
+used by `CD ..` and by absolute-path lookups.
 
 Everything is fixed-capacity where it reasonably can be (256-byte path
 components) and otherwise allocated on demand with `malloc`/`free` - there's

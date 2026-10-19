@@ -136,7 +136,7 @@ void handle_cd(void **root_ptr, const char *path) {
             }
         } else if (strcmp(components[i], ".") != 0) {
             // Look for the child node with this name
-            Tree *child = current->east;
+            Tree *child = current->west; // west = first child, east = next sibling
             Node *found = NULL;
             
             while (child) {
@@ -193,7 +193,7 @@ void handle_mkdir(void *root_ptr, const char *path) {
     // Navigate to the parent directory
     Node *current = root;
     for (int i = 0; i < count - 1; i++) {
-        Tree *child = current->east;
+        Tree *child = current->west; // west = first child, east = next sibling
         Node *found = NULL;
         
         while (child) {
@@ -224,12 +224,12 @@ void handle_mkdir(void *root_ptr, const char *path) {
     }
     
     // Link the new node into the tree
-    if (!current->east) {
+    if (!current->west) {
         // First child of this node
-        current->east = (Tree *)new_node;
+        current->west = (Tree *)new_node;
     } else {
         // Add to the end of the sibling list
-        Tree *sibling = current->east;
+        Tree *sibling = current->west;
         Tree *last_sibling = NULL;
         
         // Find the last sibling in the list
@@ -292,7 +292,7 @@ void handle_ls(const void *root_ptr, const char *args) {
         return;
     }
     
-    Tree *current = root->east;
+    Tree *current = root->west; // west = first child, east = next sibling
     int dir_count = 0;
     int file_count = 0;
     

@@ -117,7 +117,7 @@ int delete_leaf(Node *root, const int8 *key) {
     // (anywhere in the chain, not just adjacent to the target key),
     // this would misread a Node's bytes as a Leaf's.
     Tree *prev = NULL;
-    Tree *current = root->east;
+    Tree *current = root->west;
 
     if (!root || !key) {
         errno = EINVAL;
@@ -144,7 +144,7 @@ int delete_leaf(Node *root, const int8 *key) {
             if (prev->n.tag & (TagNode | TagRoot)) prev->n.east = next;
             else prev->l.east = next;
         } else {
-            root->east = next;
+            root->west = next;
         }
 
         if (current->l.value) free(current->l.value);
@@ -177,12 +177,12 @@ Tree *find_last_linear(Node *parent) {
         return NULL;
     }
 
-    if (!parent->east) {
+    if (!parent->west) {
         errno = NoError;
         return NULL;
     }
 
-    t = parent->east;
+    t = parent->west;
     while (1) {
         Tree *next = (t->n.tag & (TagNode | TagRoot)) ? t->n.east : t->l.east;
         if (!next) break;
@@ -223,7 +223,7 @@ Leaf *create_leaf(Node *parent, const int8 *key, const int8 *value, int16 count)
     // type that sibling actually is.
     if (!last_sibling) {
         // First child for this parent
-        parent->east = (Tree *)new_leaf;
+        parent->west = (Tree *)new_leaf;
         new_leaf->west = (Tree *)parent;
     } else if (last_sibling->n.tag & (TagNode | TagRoot)) {
         last_sibling->n.east = (Tree *)new_leaf;
@@ -279,7 +279,7 @@ Leaf *search_leaf(const Node *root, const int8 *key) {
     // which misread a Node's bytes as a Leaf's (and silently missed
     // any real leaf sitting past a subdirectory in the same chain)
     // whenever a parent had both kinds of children.
-    current = root->east;
+    current = root->west;
     while (current != NULL) {
         if (current->l.tag & TagLeaf) {
             if (strcmp((const char *)current->l.key, (const char *)key) == 0) {
@@ -328,27 +328,36 @@ Node *search_node(const Node *root, const int8 *path) {
 void print_search_result(Leaf *result, const int8 *key);
 
 // Recursive function to free all nodes and leaves
+// Recursing into "children" and continuing to "the next sibling" used
+// to be the same operation here (both just followed ->east), which
+// happened to free everything reachable at all only because the two
+// relationships were never cleanly separated in the first place - see
+// tree.h. Now that west is first-child and east is next-sibling, both
+// have to be walked explicitly.
 static void free_tree(Tree *tree) {
     if (!tree) return;
-    
+
     if (tree->n.tag & (TagNode | TagRoot)) {
-        // If it's a node, recursively free its children
+        if (tree->n.west) {
+            free_tree(tree->n.west); // this node's children
+        }
         if (tree->n.east) {
-            free_tree(tree->n.east);
+            free_tree(tree->n.east); // its next sibling
         }
         // Free the node itself if it's not the root
         if (!(tree->n.tag & TagRoot)) {
             free(tree);
         }
     } else if (tree->l.tag & TagLeaf) {
-        // If it's a leaf, free its resources
+        if (tree->l.east) {
+            free_tree(tree->l.east); // its next sibling
+        }
         if (tree->l.key) {
             free(tree->l.key);
         }
         if (tree->l.value) {
             free(tree->l.value);
         }
-        // Free the leaf itself
         free(tree);
     }
 }
@@ -356,26 +365,12 @@ static void free_tree(Tree *tree) {
 // Function to free all resources
 void tree_cleanup() {
     printf("Cleaning up memory...\n");
-    
-    // Start from the first child of root
-    if (root.n.east) {
-        Tree *current = root.n.east;
-        Tree *next;
-        
-        // Traverse and free all siblings
-        while (current) {
-            next = (current->n.tag & (TagNode | TagRoot)) ? 
-                   current->n.east : 
-                   current->l.east;
-            
-            free_tree(current);
-            current = next;
-        }
-        
-        // Reset root's east pointer
-        root.n.east = NULL;
+
+    if (root.n.west) {
+        free_tree(root.n.west);
+        root.n.west = NULL;
     }
-    
+
     printf("Memory cleanup completed.\n");
 }
 

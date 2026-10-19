@@ -21,10 +21,25 @@ typedef struct s_leaf Leaf;
 typedef union u_tree Tree;
 
 // Structure definitions
+//
+// Tree shape: north is the parent pointer. west is the first child
+// (NULL if this node has none) - only meaningful on a Node, since a
+// Leaf can't have children of its own, but still Tree*-typed rather
+// than Node*-typed because that first child may itself be a Node
+// (subdirectory) or a Leaf (file). east is the next sibling at the
+// same level, chained through however many Nodes and Leafs are mixed
+// together under one parent. west and east used to be the same field
+// (both just called "east") pulling double duty as both "my first
+// child" and "my next sibling" depending on which direction a given
+// piece of code approached a node from, which worked only by luck for
+// a flat, single-level tree: the moment any node had both real
+// children of its own *and* a sibling, listing that sibling's
+// children (reached via that shared field) and this node's own
+// grandchildren became indistinguishable to every traversal.
 struct s_node {
     Tag tag;
     Node *north;
-    Node *west;
+    Tree *west;
     Tree *east;
     int8 path[256];
 };
