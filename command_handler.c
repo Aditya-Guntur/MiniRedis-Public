@@ -350,11 +350,14 @@ void handle_pwd(const void *root_ptr, const char *args) {
     }
     
     // In a full implementation, we would traverse up the tree to build the full path
-    // For now, we'll just show the current node's path
-    if (root->path[0]) {
-        printf("/%s\n", root->path);
-    } else {
+    // For now, we'll just show the current node's path. The root node's own
+    // path is stored as "/" (set in main()), while every other node's path
+    // is just its bare name (set in create_node()) - prepending another "/"
+    // unconditionally turned root's "/" into "//".
+    if (!root->path[0] || strcmp((const char *)root->path, "/") == 0) {
         printf("/\n");
+    } else {
+        printf("/%s\n", root->path);
     }
 }
 
